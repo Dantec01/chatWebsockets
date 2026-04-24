@@ -3,6 +3,7 @@ export interface Message {
   userId: string
   content: string
   image?: string
+  file?: { url: string; name: string; type: string; path?: string; size?: number }
   timestamp: string
 }
 

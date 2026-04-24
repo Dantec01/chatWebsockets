@@ -85,6 +85,22 @@ export function ChatContainer() {
   useEffect(() => {
     if (!userId) return
 
+    const parseMediaData = (imgUrl: string | null) => {
+      if (!imgUrl) return { image: undefined, file: undefined };
+      try {
+        if (imgUrl.trim().startsWith("{")) {
+          const parsed = JSON.parse(imgUrl);
+          if (parsed.type?.startsWith("image/")) {
+            return { image: parsed.url, file: parsed };
+          }
+          return { image: undefined, file: parsed };
+        }
+      } catch (e) {
+        // legacy string URLs
+      }
+      return { image: imgUrl, file: undefined };
+    };
+
     const loadInitialData = async () => {
       try {
         const { data: messagesData, error: messagesError } = await supabase
@@ -99,13 +115,17 @@ export function ChatContainer() {
 
         if (messagesData) {
           setMessages(
-            messagesData.map((msg) => ({
-              id: msg.id,
-              userId: msg.user_id,
-              content: msg.content || "",
-              image: msg.image_url || undefined,
-              timestamp: msg.created_at,
-            })),
+            messagesData.map((msg) => {
+              const media = parseMediaData(msg.image_url);
+              return {
+                id: msg.id,
+                userId: msg.user_id,
+                content: msg.content || "",
+                image: media.image,
+                file: media.file,
+                timestamp: msg.created_at,
+              };
+            }),
           )
         }
 
@@ -131,11 +151,13 @@ export function ChatContainer() {
           table: "messages",
         },
         (payload) => {
+          const media = parseMediaData(payload.new.image_url);
           const newMessage: Message = {
             id: payload.new.id,
             userId: payload.new.user_id,
             content: payload.new.content || "",
-            image: payload.new.image_url || undefined,
+            image: media.image,
+            file: media.file,
             timestamp: payload.new.created_at,
           }
           setMessages((prev) => {
@@ -244,24 +266,21 @@ export function ChatContainer() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
 
-  const handleSendMessage = async (content: string, imageBase64?: string) => {
+  const handleSendMessage = async (content: string, file?: File) => {
     setIsLoading(true)
 
-    // Convert Base64 back to a file if there's an image
-    let imageUrl = null;
-    if (imageBase64) {
+    // Upload file if selected
+    let dbImageUrlValue = null;
+    
+    if (file) {
       try {
-        const response = await fetch(imageBase64);
-        const blob = await response.blob();
-        
         // Generate a unique filename using timestamp and random string
-        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.png`;
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
         
-        // Compress standard before upload to save space (since limit is 50MB)
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('chat-images')
-          .upload(fileName, blob, {
-            contentType: 'image/png',
+          .upload(fileName, file, {
+            contentType: file.type || 'application/octet-stream',
             upsert: false
           });
           
@@ -272,12 +291,19 @@ export function ChatContainer() {
           .from('chat-images')
           .getPublicUrl(fileName);
           
-        imageUrl = publicUrlData.publicUrl;
+        // Store as JSON inside image_url column to hold rich metadata WITHOUT DB migrations
+        dbImageUrlValue = JSON.stringify({
+          url: publicUrlData.publicUrl,
+          name: file.name,
+          type: file.type || 'application/octet-stream',
+          size: file.size,
+          path: fileName
+        });
       } catch (err: any) {
-        console.error("[Chat] Error uploading image:", err);
-        alert(`Error al subir la imagen. Detalle: ${err.message || "Desconocido"}`);
+        console.error("[Chat] Error uploading file:", err);
+        alert(`Error al subir el archivo. Detalle: ${err.message || "Desconocido"}`);
         setIsLoading(false);
-        return; // Don't send the message if image upload fails
+        return; // Don't send the message if upload fails
       }
     }
 
@@ -286,7 +312,7 @@ export function ChatContainer() {
       .insert({
         user_id: userId,
         content: content || null,
-        image_url: imageUrl,
+        image_url: dbImageUrlValue,
         created_at: new Date().toISOString(),
       })
       .select()
@@ -299,12 +325,40 @@ export function ChatContainer() {
   }
 
   const handleClearChat = async () => {
-    const { error } = await supabase.from("messages").delete().neq("id", "00000000-0000-0000-0000-000000000000")
+    try {
+      // Find all messages with files to delete them from storage
+      const { data: messagesWithMedia } = await supabase
+        .from("messages")
+        .select("image_url")
+        .not("image_url", "is", null);
 
-    if (error) {
-      console.error("[v0] Error al limpiar chat:", error)
-    } else {
+      if (messagesWithMedia && messagesWithMedia.length > 0) {
+        const filePaths = messagesWithMedia.map((m) => {
+          let path = null;
+          try {
+            if (m.image_url.trim().startsWith('{')) {
+              path = JSON.parse(m.image_url).path;
+            } else {
+              // Legacy extraction from public URL
+              const parts = m.image_url.split('/chat-images/');
+              if (parts.length > 1) path = parts[1];
+            }
+          } catch(e) {}
+          return path;
+        }).filter(Boolean);
+
+        if (filePaths.length > 0) {
+          await supabase.storage.from('chat-images').remove(filePaths as string[]);
+        }
+      }
+
+      // Delete messages from table
+      const { error } = await supabase.from("messages").delete().neq("id", "00000000-0000-0000-0000-000000000000")
+
+      if (error) throw error;
       setMessages([])
+    } catch (error) {
+      console.error("[v0] Error al limpiar chat:", error)
     }
   }
 

@@ -5,7 +5,7 @@ import { useState } from "react"
 import type { Message } from "@/lib/types"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
-import { FileText, Loader2, Copy, Check } from "lucide-react"
+import { FileText, Loader2, Copy, Check, Download } from "lucide-react"
 import { ImageModal } from "./image-modal"
 import Tesseract from "tesseract.js"
 
@@ -171,6 +171,25 @@ export function ChatMessages({ messages, currentUserId, messagesEndRef }: ChatMe
                           <p className="whitespace-pre-wrap leading-relaxed">{extractedTexts[message.id]}</p>
                         </div>
                       )}
+                    </div>
+                  )}
+                  {message.file && !message.file.type?.startsWith("image/") && (
+                    <div className="mb-2 w-[250px] md:w-[300px] border border-white/20 bg-black/10 rounded-md p-3 flex flex-col gap-2 shadow-sm">
+                      <div className="flex items-center gap-3">
+                        <div className="bg-white/20 p-2 rounded shrink-0">
+                          <FileText className="h-5 w-5 text-white" />
+                        </div>
+                        <div className="overflow-hidden">
+                          <p className="text-sm font-medium truncate" title={message.file.name}>{message.file.name}</p>
+                          <p className="text-xs opacity-75 truncate">{message.file.size ? (message.file.size / 1024 / 1024).toFixed(2) + ' MB' : message.file.type || 'Archivo'}</p>
+                        </div>
+                      </div>
+                      <Button asChild size="sm" variant="secondary" className="w-full text-foreground hover:bg-white/90">
+                        <a href={message.file.url} download={message.file.name} target="_blank" rel="noreferrer">
+                          <Download className="h-4 w-4 mr-2" />
+                          Descargar 
+                        </a>
+                      </Button>
                     </div>
                   )}
                   {message.content && <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>}
