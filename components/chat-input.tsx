@@ -102,12 +102,19 @@ export function ChatInput({ onSendMessage, isLoading }: ChatInputProps) {
           onChange={(e) => setMessage(e.target.value)}
           onPaste={handlePaste}
           placeholder="Escribe un mensaje..."
-          className="min-h-[44px] resize-none bg-background"
+          className="min-h-[44px] resize-none bg-background shadow-sm"
           rows={1}
           disabled={isLoading}
         />
-        <Button onClick={handleSend} disabled={(!message.trim() && !imagePreview) || isLoading} className="shrink-0">
-          <Send className="h-4 w-4" />
+        <Button 
+          onClick={handleSend} 
+          disabled={(!message.trim() && !imagePreview) || isLoading} 
+          className="shrink-0 relative overflow-hidden"
+        >
+          {isLoading ? (
+            <div className="absolute inset-0 bg-primary/20 animate-pulse" />
+          ) : null}
+          <Send className={`h-4 w-4 ${isLoading ? 'animate-pulse' : ''}`} />
           <span className="sr-only">Enviar mensaje</span>
         </Button>
       </div>

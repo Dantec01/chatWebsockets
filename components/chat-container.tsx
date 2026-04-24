@@ -233,21 +233,55 @@ export function ChatContainer() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
 
-  const handleSendMessage = async (content: string, image?: string) => {
+  const handleSendMessage = async (content: string, imageBase64?: string) => {
     setIsLoading(true)
 
-    const { error } = await supabase
+    // Convert Base64 back to a file if there's an image
+    let imageUrl = null;
+    if (imageBase64) {
+      try {
+        const response = await fetch(imageBase64);
+        const blob = await response.blob();
+        
+        // Generate a unique filename using timestamp and random string
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.png`;
+        
+        // Compress standard before upload to save space (since limit is 50MB)
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('chat-images')
+          .upload(fileName, blob, {
+            contentType: 'image/png',
+            upsert: false
+          });
+          
+        if (uploadError) throw uploadError;
+
+        // Get public URL
+        const { data: publicUrlData } = supabase.storage
+          .from('chat-images')
+          .getPublicUrl(fileName);
+          
+        imageUrl = publicUrlData.publicUrl;
+      } catch (err: any) {
+        console.error("[Chat] Error uploading image:", err);
+        alert(`Error al subir la imagen. Detalle: ${err.message || "Desconocido"}`);
+        setIsLoading(false);
+        return; // Don't send the message if image upload fails
+      }
+    }
+
+    const { error: msgError } = await supabase
       .from("messages")
       .insert({
         user_id: userId,
         content: content || null,
-        image_url: image || null,
+        image_url: imageUrl,
         created_at: new Date().toISOString(),
       })
       .select()
 
-    if (error) {
-      console.error("[v0] Error al enviar mensaje:", error)
+    if (msgError) {
+      console.error("[v0] Error al enviar mensaje:", msgError)
     }
 
     setIsLoading(false)
