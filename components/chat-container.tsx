@@ -182,17 +182,25 @@ export function ChatContainer() {
             onConflict: "user_id",
           },
         )
+        // Cleanup fantasma: Eliminar usuarios que no han enviado pulso en más de 2 mins
+        const staleLimit = new Date(Date.now() - 120000).toISOString()
+        await supabase.from("active_users").delete().lt("last_active", staleLimit)
       } catch (error) {
         console.error("[v0] Error al actualizar actividad:", error)
       }
     }, 30000)
 
-    const handleBeforeUnload = async () => {
-      try {
-        await supabase.from("active_users").delete().eq("user_id", userId)
-        localStorage.removeItem("chat-user-id")
-      } catch (error) {
-        console.error("[v0] Error en desconexión:", error)
+    const handleBeforeUnload = () => {
+      // Fire and forget keepalive para que asegure eliminar fila al cerrar navegador abruptamente
+      if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+        fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/active_users?user_id=eq.${userId}`, {
+          method: 'DELETE',
+          headers: {
+            'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`
+          },
+          keepalive: true
+        }).catch(() => {})
       }
     }
 
@@ -217,11 +225,14 @@ export function ChatContainer() {
       }
 
       if (data) {
+        const activeThreshold = Date.now() - 60000 // Inactivo por más de 60 segs no se muestra
         setUsers(
-          data.map((u) => ({
-            id: u.user_id,
-            lastActive: u.last_active,
-          })),
+          data
+            .filter((u) => new Date(u.last_active).getTime() > activeThreshold)
+            .map((u) => ({
+              id: u.user_id,
+              lastActive: u.last_active,
+            })),
         )
       }
     } catch (error) {

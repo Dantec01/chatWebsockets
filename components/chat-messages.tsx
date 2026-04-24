@@ -173,7 +173,7 @@ export function ChatMessages({ messages, currentUserId, messagesEndRef }: ChatMe
                       )}
                     </div>
                   )}
-                  {message.content && <p className="text-pretty text-sm leading-relaxed">{message.content}</p>}
+                  {message.content && <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>}
                 </div>
               </div>
             </div>
