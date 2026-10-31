@@ -1,6 +1,7 @@
 # Real-Time Chat with Supabase & Next.js
 
 Aplicación de chat en tiempo real construida con Next.js 16 (React 19), Tailwind CSS v4, componentes de interfaz de usuario de Radix UI (estilo Shadcn UI) y Supabase para el backend y manejo de WebSockets.
+
 <img width="1134" height="738" alt="image" src="https://github.com/user-attachments/assets/bc78f2d6-f84b-4007-8dd6-8367378fc46f" />
 ## 🚀 Características
 - Mensajería en tiempo real usando Supabase Realtime.
